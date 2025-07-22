@@ -1,1 +1,3 @@
-Simple python autoscaler for RabbitMQ workers using supervisor
+Simple python autoscaler for RabbitMQ workers using supervisor.
+
+With dashboard.
