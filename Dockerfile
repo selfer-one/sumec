@@ -1,8 +1,3 @@
-FROM python:3.13-slim
+FROM nginx:1.29.0-alpine3.22
 
-WORKDIR /app
-
-COPY main.py .
-COPY test.py .
-
-CMD ["python", "main.py"]
+COPY ./index.html /usr/share/nginx/html/index.html

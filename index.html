@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Python Supervisor Autoscaler — Demo Dashboard</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--muted:#9aa4b2;--accent:#60a5fa;--good:#10b981;--bad:#ef4444}
+    *{box-sizing:border-box;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial}
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,#071023 0%, #071126 100%);color:#e6eef8}
+    .wrap{max-width:1100px;margin:28px auto;padding:20px}
+    header{display:flex;gap:16px;align-items:center;justify-content:space-between}
+    h1{font-size:18px;margin:0}
+    .controls{display:flex;gap:10px;align-items:center}
+    button{background:var(--accent);border:none;padding:8px 12px;border-radius:8px;color:#021126;cursor:pointer;font-weight:600}
+    .grid{display:grid;grid-template-columns:340px 1fr;gap:16px;margin-top:18px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:14px;border-radius:12px;box-shadow:0 6px 18px rgba(2,6,23,0.6);}
+    .small{font-size:13px;color:var(--muted)}
+    .server-list{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+    .server{display:flex;align-items:center;justify-content:space-between;padding:10px;border-radius:8px;background:rgba(255,255,255,0.01)}
+    .server .meta{display:flex;gap:8px;align-items:center}
+    .dot{width:10px;height:10px;border-radius:50%}
+    .metrics{display:flex;gap:8px;align-items:center}
+    .metric{font-size:12px;color:var(--muted);padding:6px 8px;border-radius:8px;background:rgba(255,255,255,0.01)}
+    .main-top{display:flex;gap:12px}
+    .panel{flex:1}
+    .chart{height:200px;background:linear-gradient(180deg, rgba(255,255,255,0.01), transparent);border-radius:8px;padding:8px}
+    .log{height:150px;overflow:auto;font-family:monospace;font-size:12px;background:#03101a;padding:10px;border-radius:8px}
+    label{display:flex;flex-direction:column;gap:6px;font-size:13px}
+    input[type=range]{width:100%}
+    .row{display:flex;gap:8px;align-items:center}
+    .pill{padding:6px 10px;border-radius:999px;background:rgba(255,255,255,0.02);font-weight:600}
+    footer{margin-top:12px;color:var(--muted);font-size:13px}
+    @media (max-width:900px){.grid{grid-template-columns:1fr;}.controls{flex-wrap:wrap}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Python Supervisor Autoscaler — Demo</h1>
+        <div class="small">Simulates task queues across servers and a simple autoscaling policy</div>
+      </div>
+      <div class="controls">
+        <button id="btn-start">Start</button>
+        <button id="btn-stop">Stop</button>
+        <div class="pill" id="state">Stopped</div>
+      </div>
+    </header>
+
+    <div class="grid">
+      <div class="card">
+        <div class="small">Servers</div>
+        <div class="server-list" id="server-list"></div>
+
+        <hr style="border:none;height:10px;">
+
+        <div class="small">Autoscaler Settings</div>
+        <div style="margin-top:8px;display:grid;gap:10px">
+          <label>Target tasks per worker: <span id="target-val">5</span>
+            <input type="range" id="target" min="1" max="20" value="5">
+          </label>
+
+          <label>Min workers per server: <span id="min-val">1</span>
+            <input type="range" id="minw" min="0" max="8" value="1">
+          </label>
+
+          <label>Max workers per server: <span id="max-val">6</span>
+            <input type="range" id="maxw" min="1" max="16" value="6">
+          </label>
+
+          <div class="row">
+            <label style="flex:1">Autoscale: <input type="checkbox" id="autoscale" checked></label>
+            <button id="simulate-spike">Simulate Spike</button>
+          </div>
+        </div>
+
+        <hr style="border:none;height:12px;">
+        <div class="small">Logs</div>
+        <div class="log" id="log"></div>
+      </div>
+
+      <div>
+        <div class="main-top" style="margin-bottom:12px">
+          <div class="card panel">
+            <div class="small">Cluster Overview</div>
+            <div style="display:flex;gap:12px;margin-top:10px">
+              <div style="flex:1">
+                <div class="small">Total servers</div>
+                <div style="font-size:20px;font-weight:700" id="total-servers">0</div>
+              </div>
+              <div style="flex:1">
+                <div class="small">Total workers</div>
+                <div style="font-size:20px;font-weight:700" id="total-workers">0</div>
+              </div>
+              <div style="flex:1">
+                <div class="small">Total queued</div>
+                <div style="font-size:20px;font-weight:700" id="total-queued">0</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card panel">
+            <div class="small">Scaling Activity</div>
+            <canvas id="scale-chart" class="chart" width="600" height="200"></canvas>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="small">Per-server details</div>
+          <div style="margin-top:10px;display:grid;gap:8px" id="server-cards"></div>
+        </div>
+      </div>
+    </div>
+
+    <footer>Demo — not connected to any real supervisor. Designed to demonstrate basic autoscaling decisions.</footer>
+  </div>
+
+<script>
+// --- Simple demo autoscaler simulation ---
+const servers = [];
+let running = false;
+let tickInterval = null;
+const logEl = document.getElementById('log');
+const serverListEl = document.getElementById('server-list');
+const serverCardsEl = document.getElementById('server-cards');
+const totalServersEl = document.getElementById('total-servers');
+const totalWorkersEl = document.getElementById('total-workers');
+const totalQueuedEl = document.getElementById('total-queued');
+const stateEl = document.getElementById('state');
+const scaleChart = document.getElementById('scale-chart');
+const ctx = scaleChart.getContext('2d');
+let chartHistory = [];
+
+// basic config controls
+const targetInput = document.getElementById('target');
+const minw = document.getElementById('minw');
+const maxw = document.getElementById('maxw');
+const autoscaleCb = document.getElementById('autoscale');
+
+function seedServers(n=4){
+  servers.length = 0;
+  for(let i=0;i<n;i++){
+    servers.push({
+      id: 'srv-'+(i+1),
+      addr: '10.0.0.'+(10+i),
+      workers: 1 + Math.floor(Math.random()*3),
+      queued: Math.floor(Math.random()*6),
+      cpu: 10 + Math.random()*20,
+      mem: 30 + Math.random()*30,
+      up: true
+    });
+  }
+}
+
+function renderServerList(){
+  serverListEl.innerHTML = '';
+  servers.forEach(s=>{
+    const el = document.createElement('div');
+    el.className = 'server';
+    el.innerHTML = `
+      <div class="meta"><div class="dot" style="background:${s.up? 'var(--good)':'var(--bad)'}"></div>
+        <div><strong>${s.id}</strong><div class="small">${s.addr}</div></div>
+      </div>
+      <div class="metrics">
+        <div class="metric">Workers: <strong>${s.workers}</strong></div>
+        <div class="metric">Queue: <strong>${s.queued}</strong></div>
+        <div class="metric">CPU: <strong>${Math.round(s.cpu)}%</strong></div>
+      </div>
+    `;
+    serverListEl.appendChild(el);
+  });
+}
+
+function renderServerCards(){
+  serverCardsEl.innerHTML = '';
+  servers.forEach((s,idx)=>{
+    const card = document.createElement('div');
+    card.className = 'server';
+    card.style.display = 'flex';
+    card.style.flexDirection = 'column';
+    card.style.alignItems = 'stretch';
+    card.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div><strong>${s.id}</strong><div class="small">${s.addr}</div></div>
+        <div class="small">workers: ${s.workers}</div>
+      </div>
+      <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+        <div style="flex:1">
+          <div class="small">Queue</div>
+          <div style="font-weight:700">${s.queued}</div>
+        </div>
+        <div style="flex:1">
+          <div class="small">CPU</div>
+          <div style="font-weight:700">${Math.round(s.cpu)}%</div>
+        </div>
+        <div style="min-width:120px;display:flex;gap:6px;align-items:center;justify-content:flex-end">
+          <button onclick="manualScale(${idx},-1)">-</button>
+          <button onclick="manualScale(${idx},1)">+</button>
+        </div>
+      </div>
+    `;
+    serverCardsEl.appendChild(card);
+  });
+}
+
+function log(msg){
+  const time = new Date().toLocaleTimeString();
+  logEl.innerText = `[${time}] ${msg}\n` + logEl.innerText;
+}
+
+function manualScale(idx, delta){
+  const s = servers[idx];
+  s.workers = Math.max(0, s.workers + delta);
+  log(`Manual scale ${s.id} -> workers=${s.workers}`);
+  render();
+}
+
+function autoscaleTick(){
+  const target = Number(targetInput.value);
+  const minWorkers = Number(minw.value);
+  const maxWorkers = Number(maxw.value);
+
+  servers.forEach(s=>{
+    // simple decision: desired workers = ceil(queued/target)
+    const desired = Math.max(minWorkers, Math.min(maxWorkers, Math.ceil(s.queued / Math.max(1,target))));
+    if(desired > s.workers){
+      // scale up
+      s.workers = Math.min(maxWorkers, s.workers + Math.ceil((desired - s.workers)/1));
+      log(`Scale up ${s.id} -> ${s.workers} (queued=${s.queued})`);
+      chartHistory.push({t:Date.now(), event:'up', srv:s.id, val:s.workers});
+    } else if(desired < s.workers){
+      // scale down
+      s.workers = Math.max(minWorkers, s.workers - Math.ceil((s.workers - desired)/1));
+      log(`Scale down ${s.id} -> ${s.workers} (queued=${s.queued})`);
+      chartHistory.push({t:Date.now(), event:'down', srv:s.id, val:s.workers});
+    }
+  });
+}
+
+function simulateWork(){
+  // each server processes up to workers tasks per tick
+  servers.forEach(s=>{
+    const processed = Math.min(s.queued, Math.floor(s.workers * (0.6 + Math.random()*0.9)));
+    s.queued = Math.max(0, s.queued - processed);
+    // random new tasks arrive
+    const incoming = Math.random() < 0.4 ? Math.floor(Math.random()*3) : (Math.random()<0.05? Math.floor(Math.random()*15):0);
+    s.queued += incoming;
+    // cpu roughly correlates with workers and queue
+    s.cpu = Math.min(99, s.cpu*0.6 + s.workers*8 + s.queued*1.2 + (Math.random()*10-3));
+    s.mem = Math.min(98, s.mem*0.7 + s.workers*4 + (Math.random()*6));
+  });
+}
+
+function simulateTick(){
+  if(!running) return;
+  simulateWork();
+  if(autoscaleCb.checked) autoscaleTick();
+  render();
+}
+
+function render(){
+  renderServerList();
+  renderServerCards();
+  const totalServers = servers.length;
+  const totalWorkers = servers.reduce((a,b)=>a+b.workers,0);
+  const totalQueued = servers.reduce((a,b)=>a+b.queued,0);
+  totalServersEl.innerText = totalServers;
+  totalWorkersEl.innerText = totalWorkers;
+  totalQueuedEl.innerText = totalQueued;
+  drawChart();
+}
+
+function drawChart(){
+  // simple event-based chart: show last 50 events as colored dots and workers count trend
+  const w = scaleChart.width; const h = scaleChart.height;
+  ctx.clearRect(0,0,w,h);
+  // background grid
+  ctx.fillStyle = 'rgba(255,255,255,0.02)';
+  ctx.fillRect(0,0,w,h);
+
+  // draw workers trend line from aggregated history (sample current totals)
+  chartHistory.push({t:Date.now(), totalWorkers: servers.reduce((a,b)=>a+b.workers,0)});
+  const hist = chartHistory.slice(-60);
+  const minT = Math.min(...hist.map(x=>x.t));
+  const maxT = Math.max(...hist.map(x=>x.t));
+  const timespan = Math.max(1, maxT-minT);
+  const vals = hist.map(x=>x.totalWorkers||0);
+  const maxVal = Math.max(1, ...vals);
+  // line
+  ctx.beginPath();
+  hist.forEach((p,i)=>{
+    const x = ((p.t - minT)/timespan) * w;
+    const y = h - ( ( (p.totalWorkers||0) / maxVal) * h );
+    if(i==0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.strokeStyle = 'rgba(96,165,250,0.95)';
+  ctx.lineWidth = 2; ctx.stroke();
+
+  // mark last scaling events
+  let ex = hist.length>0 ? (hist[hist.length-1].t) : Date.now();
+  const events = chartHistory.filter(e=>e.event).slice(-40);
+  events.forEach((ev,i)=>{
+    const x = ((ev.t - minT)/timespan) * w;
+    ctx.beginPath();
+    ctx.arc(x, h-6, 5,0,Math.PI*2);
+    ctx.fillStyle = ev.event=='up'? 'rgba(16,185,129,0.95)' : 'rgba(239,68,68,0.95)';
+    ctx.fill();
+  });
+}
+
+// UI bindings
+document.getElementById('btn-start').addEventListener('click', ()=>{
+  if(running) return;
+  running = true; stateEl.innerText = 'Running'; stateEl.style.background='var(--good)';
+  tickInterval = setInterval(simulateTick, 1200);
+  log('Simulation started');
+});
+
+document.getElementById('btn-stop').addEventListener('click', ()=>{
+  if(!running) return;
+  running = false; stateEl.innerText = 'Stopped'; stateEl.style.background='';
+  clearInterval(tickInterval); tickInterval = null;
+  log('Simulation stopped');
+});
+
+document.getElementById('simulate-spike').addEventListener('click', ()=>{
+  // add large amount of queued tasks for few servers
+  for(let i=0;i<Math.min(2,servers.length);i++){
+    servers[i].queued += 20 + Math.floor(Math.random()*30);
+  }
+  log('Simulated traffic spike on 2 servers'); render();
+});
+
+targetInput.addEventListener('input', ()=>{document.getElementById('target-val').innerText = targetInput.value});
+minw.addEventListener('input', ()=>{document.getElementById('min-val').innerText = minw.value});
+maxw.addEventListener('input', ()=>{document.getElementById('max-val').innerText = maxw.value});
+
+// quick setup
+seedServers(5);
+render();
+
+// expose for debugging in demo
+window.__demo = {servers, render, log, manualScale};
+
+</script>
+</body>
+</html>
