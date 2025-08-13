@@ -5,6 +5,6 @@ output "load_balancer_dns" {
 
 output "load_balancer_url" {
   description = "URL of the load balancer"
-  value       = "http://\${aws_lb.main.dns_name}"
+  value       = "http://${aws_lb.main.dns_name}"
 }
 
