@@ -47,13 +47,59 @@ jobs:
       - name: Terraform Validate
         id: validate
         run: terraform validate -no-color
-      
-      - name: Terraform Plan
-        id: plan
-        if: github.event_name == 'pull_request'
-        run: terraform plan -no-color -input=false
-        continue-on-error: true
-      
+
+      - name: Terraform create ecr repository
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          TF_VAR_aws_account_id: ${{ vars.AWS_ACCOUNT_ID }}
+
+          TF_VAR_aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          TF_VAR_aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          TF_VAR_aws_region: ${{ vars.AWS_REGION }}
+          TF_IN_AUTOMATION: true
+          TF_INPUT: false
+
+          TF_WORKSPACE: dev
+        run: |
+          terraform init
+          terraform plan -no-color -target=aws_ecr_repository.sumec -out=tfplan
+          terraform apply -auto-approve -no-color tfplan 
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to ECR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com
+          username: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          password: ${{ secrets.AWS_SECRET_ACCESS_KEY }}      
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          push: true
+          tags: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/mynginx:{{ git.tag }}
+
+      - name: Terraform deploy
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ vars.AWS_REGION }}      
+          TF_VAR_aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          TF_VAR_aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          TF_VAR_aws_account_id: ${{ vars.AWS_ACCOUNT_ID }}
+          TF_VAR_aws_region: ${{ vars.AWS_REGION }}
+          TF_IN_AUTOMATION: true
+          TF_INPUT: false
+          TF_WORKSPACE: dev
+        run: |
+          terraform init
+          terraform plan -no-color -out=tfplan
+          terraform apply -auto-approve -no-color tfplan
+
       - name: Update Pull Request
         uses: actions/github-script@v7
         if: github.event_name == 'pull_request'

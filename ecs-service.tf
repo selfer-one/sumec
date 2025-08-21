@@ -14,7 +14,7 @@ resource "aws_ecs_task_definition" "lesson7" {
   container_definitions = jsonencode([
     {
       name      = "web"
-      image     = "824308980797.dkr.ecr.eu-central-1.amazonaws.com/sumec:latest"
+      image     = "${var.aws_account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/sumec:latest"
       portMappings = [
         {
           containerPort = 80
