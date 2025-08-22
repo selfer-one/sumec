@@ -43,9 +43,7 @@ jobs:
       
       - name: Terraform Init
         id: init
-        run: |
-	  terraform init
-	  cat .terraform/terraform.tfstate | grep '"type"'
+        run: terraform init && cat .terraform/terraform.tfstate | grep '"type"'
       
       - name: Terraform Validate
         id: validate
