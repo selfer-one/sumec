@@ -50,7 +50,7 @@ jobs:
         run: terraform validate -no-color
     
       - name: Terraform destroy
-	run: terraform destroy -auto-aprove
+        run: terraform destroy -auto-aprove
 #
 #      - name: Terraform create ecr repository
 #        env:
