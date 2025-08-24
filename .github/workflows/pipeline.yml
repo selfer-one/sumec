@@ -66,7 +66,7 @@ jobs:
 
       - name: Build and push Docker image
         env:
-          ECR_REGISTRY: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/
+          ECR_REGISTRY: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
           ECR_REPOSITORY: sumec
           IMAGE_TAG: latest
         run: |
