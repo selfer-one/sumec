@@ -17,8 +17,8 @@ resource "aws_ecs_task_definition" "lesson7" {
       image     = "${var.aws_account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/sumec:latest"
       portMappings = [
         {
-          containerPort = 80
-          hostPort      = 80
+          containerPort = 8000
+          hostPort      = 8000
           protocol      = "tcp"
         }
       ]
