@@ -95,7 +95,7 @@ jobs:
         run: |
           npm install
           npm test -- --url="${{ steps.lb_url.outputs.url }}"
-
+        continue-on-error: true   # <- don't stop yet
  
       - name: Terraform destroy
         run: |
@@ -107,3 +107,8 @@ jobs:
         with:
           name: junit-results
           path: results/test-results.xml
+        if: always()
+
+      - name: Fail if tests failed
+        run: exit 1
+        if: failure()             # <- fail only if test step failed
