@@ -90,11 +90,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
-        run: |
-          npm install
 
       - name: Run tests
-        run: npm test -- --url="${{ steps.lb_url.outputs.url }}"
+        run: |
+          npm install
+          npm test -- --url="${{ steps.lb_url.outputs.url }}"
 
  
       - name: Terraform destroy
