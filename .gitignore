@@ -7,3 +7,5 @@ terraform-ecr/terraform.tfstate.backup
 .terraform.lock.hcl
 terraform.tfstate.backup
 lesson7/.terraform/*
+node_modules
+results

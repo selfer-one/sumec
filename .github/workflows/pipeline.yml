@@ -86,24 +86,24 @@ jobs:
           echo "url=$LB_URL" >> $GITHUB_OUTPUT
           echo "Load Balancer URL: $LB_URL"
       
-      - name: Test Application
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      - name: Prepare node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
         run: |
-          echo "Waiting for ECS service to be stable..."
-          sleep 60
-          
-          echo "Testing application availability..."
-          for i in {1..10}; do
-            if curl -f "${{ steps.lb_url.outputs.url }}"; then
-              echo "Application is responding!"
-              break
-            else
-              echo "Attempt $i failed, retrying in 30 seconds..."
-              sleep 30
-            fi
-          done
+          npm install
+
+      - name: Run tests
+        run: npm test -- --url="${{ steps.lb_url.outputs.url }}"
+
  
       - name: Terraform destroy
         run: |
           aws ecr batch-delete-image --repository-name sumec --image-ids="$(aws ecr list-images --repository-name sumec --query 'imageIds[*]' --output json)" || aws ecr batch-delete-image --repository-name sumec --image-ids="$(aws ecr list-images --repository-name sumec --query 'imageIds[*]' --output json)"
           terraform destroy -auto-approve
+
+      - name: Upload JUnit results
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-results
+          path: results/test-results.xml
