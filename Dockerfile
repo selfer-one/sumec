@@ -9,6 +9,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy app
 COPY autoscaler_app.py .
 
-EXPOSE 8000
+EXPOSE 80
 
-CMD ["uvicorn", "autoscaler_app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "autoscaler_app:app", "--host", "0.0.0.0", "--port", "80"]
