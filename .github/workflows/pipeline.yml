@@ -92,23 +92,25 @@ jobs:
           node-version: 24
 
       - name: Run tests
+        id: run-tests
         run: |
           npm install
-          npm test -- --url="${{ steps.lb_url.outputs.url }}"
+          set +e
+          npm test -- --url=${{ steps.lb_url.outputs.url }}
+          echo "exitcode=$?" >> $GITHUB_OUTPUT
+          set -e
         continue-on-error: true   # <- don't stop yet
  
       - name: Terraform destroy
         run: |
           aws ecr batch-delete-image --repository-name sumec --image-ids="$(aws ecr list-images --repository-name sumec --query 'imageIds[*]' --output json)" || aws ecr batch-delete-image --repository-name sumec --image-ids="$(aws ecr list-images --repository-name sumec --query 'imageIds[*]' --output json)"
           terraform destroy -auto-approve
-
-      - name: Upload JUnit results
-        uses: actions/upload-artifact@v4
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: (!cancelled())
         with:
-          name: junit-results
-          path: results/test-results.xml
-        if: always()
+          files: results/*.xml
 
       - name: Fail if tests failed
         run: exit 1
-        if: failure()             # <- fail only if test step failed
+        if: steps.run-tests.outputs.exitcode != '0'

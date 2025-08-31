@@ -5,7 +5,7 @@ import minimist from "minimist";
 const argv = minimist(process.argv.slice(2));
 const baseURL = argv.url || "http://localhost:8000";  // use --url=... or fallback
 
-async function waitForHealthz(timeout = 20000) {
+async function waitForHealthz(timeout = 300000) {
   const start = Date.now();
   while (Date.now() - start < timeout) {
     try {
@@ -16,7 +16,7 @@ async function waitForHealthz(timeout = 20000) {
     } catch (err) {
       // ignore until timeout
     }
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 5000));
   }
   throw new Error("App did not become healthy in time");
 }
